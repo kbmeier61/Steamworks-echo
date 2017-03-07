@@ -65,20 +65,46 @@ public class Robot extends IterativeRobot {
 	
 	int autoLoopCounter;
 	ActionRecorder actions;
-	private Talon agitatorMotor;
-		
-	private boolean robotHasTalonSRX = true;
 
+	private Thread autoThread;
+
+	private boolean autoStarted;
+		
 	@Override
 	public void robotInit() {
-		if (robotHasTalonSRX ) {
+		
+		boolean robotHasTalonSRX = false;
+
+		try {
+			lowerRight = new CANTalon(1);
+			long version = lowerRight.GetFirmwareVersion();
+			System.out.println("lowerRight firmware version is: " + version);
+			
+			if (version > 0) {
+				robotHasTalonSRX = true;
+			}
+		} catch (Exception e) {
+
+		}
+		
+		if (robotHasTalonSRX) {
 			upperLeft          = new CANTalon(3);
 			upperRight         = new CANTalon(10);
 			lowerLeft           = new CANTalon(11);
 			lowerRight          = new CANTalon(1);
 
+			System.out.println("Running with CANTalons");
+			
 			drive              = new RobotDrive(upperLeft, lowerLeft, upperRight, lowerRight);
+			
+			winchTalon         = new Talon(0);
+			pickUpOneTalon     = new Talon(1);
+			
+			agitatorLeft = new Talon(2);
+			agitatorRight = new Talon(3);
+			
 		} else {
+			System.out.println("Running with old Talons");
 			Talon leftFront		= new Talon(0);
 			Talon rightFront	= new Talon(1);
 			Talon leftRear		= new Talon(2);
@@ -89,6 +115,13 @@ public class Robot extends IterativeRobot {
 			leftRear.setInverted(true);
 			rightRear.setInverted(true);
 			drive				= new RobotDrive(leftFront, leftRear, rightFront, rightRear);
+
+			winchTalon         = new Talon(4);
+			pickUpOneTalon     = new Talon(5);
+			
+			agitatorLeft = new Talon(6);
+			agitatorRight = new Talon(7);
+			
 		}
 		
 		
@@ -97,25 +130,19 @@ public class Robot extends IterativeRobot {
 
 		xbox               = new XboxController(2);
 		
-		winchTalon         = new Talon(0);
-		pickUpOneTalon     = new Talon(1);
-		agitatorMotor		= new Talon(2);
+		highGear 			= new Toggle();
+		
+		pneumaticPressure  = new AnalogInput(0);
 		
 		shooterOneTopMotor = new CANTalon(4);
 		shooterOneBottomMotor = new CANTalon(6);
 		shooterTwoTopMotor = new CANTalon(2);
 		shooterTwoBottomMotor = new CANTalon(5);
 		
-		agitatorLeft = new Talon();
-		agitatorRight = new Talon();
-		
 		shooterOneBottomMotor.setInverted(true);
-	
+		
 		gearShifter        = new DoubleSolenoid(4, 5);
-		highGear 			= new Toggle();
-		
-		pneumaticPressure  = new AnalogInput(0);
-		
+
 		actions 		   = new ActionRecorder();
 		actions.setMethod(this, "robotOperation", DriverInput.class).
 			setUpButton(xbox, 1).
@@ -161,12 +188,29 @@ public class Robot extends IterativeRobot {
 	public void autonomousInit() {
 		autoLoopCounter = 0;
 		actions.autonomousInit();
-		
+		autoStarted=false;	
 	}
 	
 	@Override
 	public void disabledInit() {
 		actions.disabledInit();
+		if (autoThread != null) {
+			System.out.println("Checking autonomous thread");
+			if (autoThread.isAlive()) {
+				System.out.println("Interrupting autonomous thread");
+				autoThread.interrupt();
+			}
+			try {
+				System.out.println("Joining autonomous thread");
+				autoThread.join(100);
+			} catch (InterruptedException e) {
+				System.out.println("Too long to join autonomous thread");
+			}
+			if (!autoThread.isAlive()) {
+				autoThread = null;
+				System.out.println("Autonomous thread terminated");
+			}
+		}
 	}
 
 	@Override
@@ -181,7 +225,16 @@ public class Robot extends IterativeRobot {
 			if (actions != null)
 			{
 //				actions.playback();
-				actions.longPlayback(this, -1);
+//				actions.longPlayback(this, -1);
+//				if (autoThread == null) {
+//					autoThread = new Thread(actions);
+//					autoThread.run();
+//				}
+				if (!autoStarted) {
+					actions.notifierAuto();
+					autoStarted = true;
+				}
+				
 			} else
 			{
 				Timer.delay(0.010);
@@ -250,16 +303,6 @@ public class Robot extends IterativeRobot {
 		}
 	}
 	
-//	@Override
-//	public void disabledInit() {
-//		actions.disabledInit();
-//	}
-//
-//	@Override
-//	public void disabledPeriodic() {
-//		actions.disabledPeriodic();
-//	}
-	
 	public void robotOperation(DriverInput input) {
 //		System.out.println("Operating with: <" + input.toString() + ">");
 		
@@ -300,7 +343,7 @@ public class Robot extends IterativeRobot {
 		boolean shift = input.getButton("Shift-Input");
 		highGear.input(shift);
 		
-		System.out.println("Gear State: " + highGear.getState() + "Button: " + shift);
+//		System.out.println("Gear State: " + highGear.getState() + "Button: " + shift);
 		if (highGear.getState()) {
 			gearShifter.set(DoubleSolenoid.Value.kForward);
 		} else {

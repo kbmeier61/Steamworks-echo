@@ -9,18 +9,32 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import edu.wpi.first.wpilibj.XboxController;
+
+import edu.wpi.first.wpilibj.Notifier;
 import edu.wpi.first.wpilibj.RobotBase;
 import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj.Utility;
+import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
-public class ActionRecorder
+/**	The {@link ActionRecorder} class provides a record/playback engine for establishing autonomous routines
+ *  for an {@link IterativeRobot} by recording the actions of the robot during teleop (normally on a practice
+ *  field).  To achieve this, driver inputs are bundled in into a {@link DriverInput}.  The teleoperatedPeriodic
+ *  method calls the {@link input} method with a DriverInput.  The input method records the DriverInputs, if 
+ *  recording is enabled, and invokes a method that encapsulates all of the robot operations.  This method will
+ *  be invoked again with the same inputs during autonomous.  
+ */
+
+public class ActionRecorder implements Runnable
 {
 	private static final String autoDirName = "/home/lvuser/auto";
+	private static double ticsPerSecond=1000000.0;
+	
 	private boolean recording=false;
 	private boolean recordingReady=false;
 	private long playbackStart;
@@ -33,10 +47,15 @@ public class ActionRecorder
 	private StateButton recordButton;
 	private List<File> autoFileList;
 	private int autoFileIndex;
-	private File fileToRecord=new File(autoDirName + "/" + SmartDashboard.getString("DB/String 0", "new_auto.csv")); 
+	private File fileToRecord=new File(autoDirName + "/" + SmartDashboard.getString("DB/String 0", "new_auto.csv"));
+	private List<String> details;
+	private Notifier nextTask;
+	private int tasksDone;
 	
 	// For timing accuracy measurements
 	
+	private DateTimeFormatter nameFmt = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
 	private long Sx=0;
 	private long Sx2=0;
 	private long Sxy=0;
@@ -64,6 +83,31 @@ public class ActionRecorder
 			rv=currState && !prevState;
 			prevState=currState;
 			return rv;			
+		}
+	}
+	
+	private class AutoOperation implements Runnable {
+		
+		DriverInput input;
+		
+		public AutoOperation(DriverInput inp) {
+			input = inp;
+		}
+
+		@Override
+		public void run() {
+			invokeMethod(input);
+			tasksDone++;
+
+			if (playbackIterator.hasNext() &&
+					((RobotBase)playbackObject).isAutonomous() && ((RobotBase)playbackObject).isEnabled()) {
+//				nextTask();
+				input=playbackIterator.next();
+				
+				double delay = timeToNext(input);
+				System.out.println("After task " + tasksDone + " delay is " + delay);
+				nextTask.startSingle(delay);
+			}
 		}
 	}
 	
@@ -245,6 +289,11 @@ public class ActionRecorder
 	{
 		System.out.println("Entering disabledInit");
 		
+		if (nextTask != null) {
+			nextTask.stop();
+			nextTask=null;
+		}
+		
 		System.out.println("n=" + n +
 				" Sx=" + Sx + " Sx2=" + Sx2 + " Sxy=" + Sxy + " Sy=" + Sy + " Sy2=" + Sy2);
 				
@@ -277,8 +326,44 @@ public class ActionRecorder
 		getAutoFileList();
 
 		autoFileIndex=0;
+		
+		String dashboardFileName = SmartDashboard.getString("DB/String 0", "nothing.csv");
+		
+		for (int i=0; i<autoFileList.size(); i++) {
+			String tmp=autoFileList.get(i).getName();
+			if (dashboardFileName.equals(tmp)) {
+				autoFileIndex=i;
+				break;
+			}
+		}
+		
 //		autoFileList.add(new File("/home/lvuser/auto", "new" + String.format("%03d.csv", newIdx)));
 		displayName();
+		
+		if (details != null) {
+			writeDetails();
+			details=null;
+		}
+	}
+
+	private void writeDetails() {
+
+		try {
+
+			String name = "/home/lvuser/log/" + LocalDateTime.now().format(nameFmt) + ".log";
+
+			BufferedWriter logFile = new BufferedWriter(new FileWriter(name));
+
+			for (String det : details) {
+				logFile.write(det + "\n");
+			}
+			
+			logFile.close();
+			
+		} catch (Exception e) {
+			System.err.println("Error writing to logfile" + e.toString());
+		}
+
 	}
 
 	public void disabledPeriodic()
@@ -376,6 +461,9 @@ public class ActionRecorder
 			
 
 			try {
+				String playDetails = String.format("%.6f", (double)expectedTime/1000000.0) + "," + timeError + "," + input.toString();
+				details.add(playDetails);
+				
 				playbackMethod.invoke(playbackObject,  input);
 			} catch (IllegalAccessException e) {
 				// TODO Auto-generated catch block
@@ -468,6 +556,7 @@ public class ActionRecorder
 	public void autonomousInit()
 	{
 //		System.out.println("Entering autonomous init with " + autoFileList.get(autoFileIndex).getAbsoluteFile());
+		details = new ArrayList<String>();
 		File autoFile = autoFileList.get(autoFileIndex);
 		if (autoFile.canRead())
 		{
@@ -488,5 +577,164 @@ public class ActionRecorder
 			n=0;
 
 		}
+	}
+	
+	public void notifierAuto() {
+		if ((driverInputs==null) || (driverInputs.size() == 0))
+		{
+			System.out.println("No driver inputs to playback");
+			Timer.delay(0.050);
+			return;
+		}
+		
+		makeIterator();
+		
+		if (playbackIterator.hasNext() &&
+				((RobotBase)playbackObject).isAutonomous() && ((RobotBase)playbackObject).isEnabled()) {
+
+			tasksDone=0;
+			DriverInput input = playbackIterator.next();
+			nextTask = new Notifier(new AutoOperation(input));
+			nextTask.startSingle(timeToNext(input));
+		}
+	}
+
+	@Override
+	public void run() {
+		if ((driverInputs==null) || (driverInputs.size() == 0))
+		{
+			System.out.println("No driver inputs to playback");
+			Timer.delay(0.050);
+			return;
+		}
+		
+		if (playbackIterator == null)
+		{
+			System.out.println("Creating Iterator for " + driverInputs.size() + " inputs");
+			playbackIterator=driverInputs.iterator();
+			playbackStart=Utility.getFPGATime();
+		}
+
+		while (playbackIterator.hasNext() &&
+				((RobotBase)playbackObject).isAutonomous() && ((RobotBase)playbackObject).isEnabled() &&
+				(!Thread.interrupted())) {
+			DriverInput input=playbackIterator.next();
+			
+//			System.out.println("input time offset is " + input.getTimeOffset());
+
+			double delayForPlayback=((double)(playbackStart+input.getTimeOffset() - Utility.getFPGATime()))/1000000.0;
+//			System.out.println("Delay before input is " + delayForPlayback);
+
+			if (delayForPlayback > 0)
+			{
+				Timer.delay(delayForPlayback);
+			}
+			
+			long expectedTime=playbackStart+input.getTimeOffset();
+			long timeError=Utility.getFPGATime() - expectedTime;
+			
+			Sx += expectedTime;
+			Sx2 += (expectedTime*expectedTime);
+			Sxy += (expectedTime*timeError);
+			Sy2 += (timeError*timeError);
+			Sy += timeError;
+			
+			n++;
+			
+
+			try {
+				String playDetails = String.format("%.6f", (double)expectedTime/1000000.0) + "," + timeError + "," + input.toString();
+				details.add(playDetails);
+				
+				playbackMethod.invoke(playbackObject,  input);
+			} catch (IllegalAccessException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IllegalArgumentException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (InvocationTargetException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		System.out.println("Autonomous thread ending");
+	}
+	
+	protected void invokeMethod(DriverInput input) {
+		long expectedTime=timeOfEvent(input);
+		long timeError=Utility.getFPGATime() - expectedTime;
+		
+		Sx += expectedTime;
+		Sx2 += (expectedTime*expectedTime);
+		Sxy += (expectedTime*timeError);
+		Sy2 += (timeError*timeError);
+		Sy += timeError;
+		
+		n++;
+		
+
+		try {
+			String playDetails = String.format("%.6f", ((double)expectedTime)/ticsPerSecond) + "," +
+					String.format("%.6f", ((double)timeError)/ticsPerSecond) + "," + input.toString();
+			details.add(playDetails);
+			
+			playbackMethod.invoke(playbackObject,  input);
+		} catch (IllegalAccessException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IllegalArgumentException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InvocationTargetException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
+	}
+	
+	public double realTime(long t) {
+		return ((double)t) / ticsPerSecond;
+	}
+	
+	private void makeIterator() {
+		if (playbackIterator == null)
+		{
+			System.out.println("Creating Iterator for " + driverInputs.size() + " inputs");
+			playbackIterator=driverInputs.iterator();
+			playbackStart=Utility.getFPGATime();
+		}
+	}
+	
+	public long timeOfEvent(DriverInput input) {
+		long expectedTime=playbackStart+input.getTimeOffset();
+		return expectedTime;
+ 
+	}
+	
+	double timeToNext(DriverInput nextInput) {
+		double nextTime = realTime(timeOfEvent(nextInput));
+		double delay = nextTime - realTime(Utility.getFPGATime());
+		return delay;
+	}
+	
+	private void nextTask() {
+		DriverInput nextInput = playbackIterator.next();
+		
+		double nextTime = realTime(timeOfEvent(nextInput));
+		double delay = nextTime - realTime(Utility.getFPGATime());
+		
+		nextTask = new Notifier(new AutoOperation(nextInput));
+		nextTask.startSingle(delay);
+		
+//		System.out.println("Notifier created to start at " + nextTime + " (now " +
+//				((double)Utility.getFPGATime())/ticsPerSecond + ")" +
+//				" delay " + delay +
+//				" playbackStart was " + realTime(playbackStart) +
+//				" Event time " + realTime(nextInput.getTimeOffset()));
+	}
+	
+	public boolean notifyActive() {
+		return nextTask != null;
 	}
 }
