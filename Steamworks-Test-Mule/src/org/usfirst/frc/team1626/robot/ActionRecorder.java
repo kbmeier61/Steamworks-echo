@@ -23,11 +23,44 @@ import edu.wpi.first.wpilibj.XboxController;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 /**	The {@link ActionRecorder} class provides a record/playback engine for establishing autonomous routines
- *  for an {@link IterativeRobot} by recording the actions of the robot during teleop (normally on a practice
- *  field).  To achieve this, driver inputs are bundled in into a {@link DriverInput}.  The teleoperatedPeriodic
- *  method calls the {@link input} method with a DriverInput.  The input method records the DriverInputs, if 
- *  recording is enabled, and invokes a method that encapsulates all of the robot operations.  This method will
- *  be invoked again with the same inputs during autonomous.  
+ *  for an {@link IterativeRobot} by recording the actions of the robot during teleoperated mode (normally on
+ *  a practice field).  To achieve this, a specific flow of control is expected.  In the {@link teleoperatedPeriodic}
+ *  method, while there may be some code that is specific to teleoperated mode, all code that implements any
+ *  behavior should be performed in a method that is separate from teleoperatedPeriodic.  The focus of
+ *  teleoperatedPeriodic should be to extract inputs from the driver and operator, and bundle them  in into a
+ *  {@link DriverInput} object.  If recording is enabled during a teleoperated run, then the stream of DriverInputs
+ *  will be collected and written to roboRio storage when the robot goes back to disabled mode.  The stream of inputs
+ *  can then be replayed during autonomous operation.
+ *  
+ *  The recording and playback functionality is controlled by three buttons - FRC Team 1626 uses buttons on the operator
+ *  controller.  These buttons are:
+ *  
+ *  		* Record enable
+ *  		* Move up in the playback file list
+ *  		* Move down in the playback file list
+ *  
+ *  This version of the code expects that the operator controller is an xbox controller, but this may be able to be generalized.
+ *  
+ *  To code for the ActionRecorder, an instance of the recorder is created.  The constructor for ActionRecorder requires an
+ *  object and method that will be invoked to control the behavior of the robot. [N.B.  It may have been smarter to define an
+ *  interface that the robot class would be required to meet, rather than relying upon the reflective method search that is
+ *  currently used.] After the instance has been created, the control parameters are instantiated, either axis values or
+ *  button values.  The order of these declarations sets the order in which values are set in the recorded files.  There
+ *  should probably be default values set for each of the parameters, this would allow for expansion, ensuring that 
+ *  robot behavior is sensible, even if an older version of playback file is used, and to allow the autonomous code to
+ *  feed the safety system if the playback file ends well before the autonomous period does.
+ *  
+ *  The teleoperatedPeriodic method calls the {@link input} method with a DriverInput.  The input method records
+ *  the DriverInputs, if recording is enabled, and invokes the pre-defined robot behavior method.  This method will be
+ *  invoked again with the same inputs and the same time offset during autonomous.  
+ *  
+ *  Things to do:
+ *  
+ *  Define an interface to encapsulate the robot behavior method, instead of using the reflective programming model.
+ *  Allow the setting of default values for all DriverInput fields.
+ *  Have the autonomous mode invoke the behavior method with default values from the end of playback till the end of autonomous
+ *  Generalize the record/playback control button definition.
+ *  
  */
 
 public class ActionRecorder implements Runnable
