@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">
-<refactoring comment="Copy element &apos;Pipeline.java&apos; to &apos;Vision/src/org.usfirst.frc.team1626.robot&apos;&#x0D;&#x0A;- Original project: &apos;Robot-2017&apos;&#x0D;&#x0A;- Destination element: &apos;Vision/src/org.usfirst.frc.team1626.robot&apos;&#x0D;&#x0A;- Original element: &apos;org.usfirst.frc.team1626.robot.Pipeline.java&apos;" description="Copy compilation unit" destination="=Vision/src&lt;org.usfirst.frc.team1626.robot" element1="/src&lt;org.usfirst.frc.team1626.robot{Pipeline.java" files="0" flags="589830" folders="0" id="org.eclipse.jdt.ui.copy" policy="org.eclipse.jdt.ui.copyResources" stamp="1487635890770" units="1" version="1.0"/>
-</session>
