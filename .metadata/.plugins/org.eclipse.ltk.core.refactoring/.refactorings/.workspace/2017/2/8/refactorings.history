@@ -1,4 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<session version="1.0">
-<refactoring comment="Delete resource &apos;Steamworks-Test-Mule&apos;" deleteContents="false" description="Delete resource &apos;Steamworks-Test-Mule&apos;" element1="/Steamworks-Test-Mule" flags="7" id="org.eclipse.ltk.core.refactoring.delete.resources" resources="1" stamp="1487698760222"/>
-</session>
