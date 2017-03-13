@@ -10,11 +10,22 @@ public class Toggle {
 		prevButtonState=false;
 	}
 	
-	public boolean input(boolean state) {
-		if (state && ! prevButtonState) {
+	public boolean risingEdge(boolean state) {
+		boolean rv = state && ! prevButtonState;
+		prevButtonState = state;
+		return rv;
+	}
+	
+	public boolean fallingEdge(boolean state) {
+		boolean rv = !state && prevButtonState;
+		prevButtonState = state;
+		return rv;
+	}
+	
+	public boolean setState(boolean state) {
+		if (risingEdge(state)) {
 			toggle();
 		}
-		prevButtonState = state;
 		return toggleState;
 	}
 	
@@ -24,7 +35,6 @@ public class Toggle {
 		} else {
 			toggleState = true;
 		}
-		
 		
 		return toggleState;
 	}
