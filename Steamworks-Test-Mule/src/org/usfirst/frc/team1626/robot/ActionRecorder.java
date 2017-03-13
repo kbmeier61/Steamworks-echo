@@ -751,22 +751,6 @@ public class ActionRecorder implements Runnable
 		return delay;
 	}
 	
-	private void nextTask() {
-		DriverInput nextInput = playbackIterator.next();
-		
-		double nextTime = realTime(timeOfEvent(nextInput));
-		double delay = nextTime - realTime(Utility.getFPGATime());
-		
-		nextTask = new Notifier(new AutoOperation(nextInput));
-		nextTask.startSingle(delay);
-		
-//		System.out.println("Notifier created to start at " + nextTime + " (now " +
-//				((double)Utility.getFPGATime())/ticsPerSecond + ")" +
-//				" delay " + delay +
-//				" playbackStart was " + realTime(playbackStart) +
-//				" Event time " + realTime(nextInput.getTimeOffset()));
-	}
-	
 	public boolean notifyActive() {
 		return nextTask != null;
 	}
