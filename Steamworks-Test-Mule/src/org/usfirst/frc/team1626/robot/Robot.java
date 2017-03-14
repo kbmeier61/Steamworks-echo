@@ -158,15 +158,15 @@ public class Robot extends IterativeRobot {
 		xbox               = new XboxController(2);
 
 		highGear 			= new Toggle();
-		// Robot initially in low gear, this sets it into high gear
-		driveTrainShifter.set(DoubleSolenoid.Value.kReverse);
-
 		pressureSensor = new AnalogInput(0);
 
 		shooterOneTopMotor.setInverted(true);
 
 		gearHandler			     = new DoubleSolenoid(6, 7);
 		driveTrainShifter        = new DoubleSolenoid(4, 5);
+
+		// Robot initially in low gear, this sets it into high gear
+		driveTrainShifter.set(DoubleSolenoid.Value.kReverse);
 
 		visionThread = new Thread(() -> {
 			UsbCamera camera = CameraServer.getInstance().startAutomaticCapture();
@@ -365,14 +365,15 @@ public class Robot extends IterativeRobot {
 		drive.tankDrive(leftAxis, rightAxis);
 
 		boolean shift = (input.getButton("Driver-Right-Trigger") || input.getButton("Driver-Left-Trigger"));
-		highGear.setState(shift);
-		System.out.println("Gear State: " + highGear.getState() + "Button: " + shift);
+		highGear.setState
+		(shift);
+//		System.out.println("Gear State: " + highGear.getState() + "Button: " + shift);
 		if (highGear.getState()) {
 			driveTrainShifter.set(DoubleSolenoid.Value.kForward);
-			controlDebug("Shifter forward(high)");
+//			controlDebug("Shifter forward(high)");
 		} else {
 			driveTrainShifter.set(DoubleSolenoid.Value.kReverse);
-			controlDebug("Shifter reverse(low)");
+//			controlDebug("Shifter reverse(low)");
 }
 
 		if (input.getButton("Operator-X-Button") == true) {
@@ -402,10 +403,10 @@ public class Robot extends IterativeRobot {
 
 		if (input.getButton("Operator-Right-Bumper")) {
 			gearHandler.set(DoubleSolenoid.Value.kForward);
-			controlDebug("Gear handler forward");
+//			controlDebug("Gear handler forward");
 		} else if (input.getButton("Operator-Left-Bumper")) {
 			gearHandler.set(DoubleSolenoid.Value.kReverse);
-			controlDebug("Gear handler reverse");
+//			controlDebug("Gear handler reverse");
 		}
 
 		if (input.getButton("Operator-A-Button") == true) {
@@ -420,10 +421,10 @@ public class Robot extends IterativeRobot {
 
 		if (input.getButton("Operator-Start-Button")) {
 			winchTalon.set(winchSpeed);
-			controlDebug("Winch foreward");
+//			controlDebug("Winch foreward");
 		} else if (input.getButton("Operator-Back-Button")) {
 			winchTalon.set(-winchSpeed);
-			controlDebug("Winch reverse");
+//			controlDebug("Winch reverse");
 		} else {
 			winchTalon.set(0);
 		}
