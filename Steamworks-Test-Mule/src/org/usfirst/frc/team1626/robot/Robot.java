@@ -11,6 +11,7 @@ import edu.wpi.cscore.CvSource;
 import edu.wpi.cscore.UsbCamera;
 import edu.wpi.first.wpilibj.AnalogInput;
 import edu.wpi.first.wpilibj.CameraServer;
+import edu.wpi.first.wpilibj.Compressor;
 import edu.wpi.first.wpilibj.DoubleSolenoid;
 import edu.wpi.first.wpilibj.GenericHID.Hand;
 import edu.wpi.first.wpilibj.IterativeRobot;
@@ -32,14 +33,18 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
  */
 
 public class Robot extends IterativeRobot {
+	
+	enum Gear {HIGH_GEAR, LOW_GEAR};
 
 	private final double pickupSpeed = .90;
 	private final double shooterSpeed = 1.0;
 	private final double agitatorSpeed = 1.0;
 	private final double winchSpeed = 1.0;
+	private final int driveCurrentLimit = 60;
+	private final double throttleHighThreshold = .60;
+	private final double throttleLowThreshold = .40;
 	
 	private final boolean invertedDrive = false;
-	private final boolean debugControls=true;
 
 	private PowerDistributionPanel pdp;
 
@@ -71,6 +76,11 @@ public class Robot extends IterativeRobot {
 
 	Toggle  highGear;
 	private AnalogInput pressureSensor;
+	private Compressor compressor;
+
+	boolean robotHasTalonSRX = true;
+
+
 
 	//	Pipeline visionProcessing;
 	Thread visionThread;
@@ -85,8 +95,6 @@ public class Robot extends IterativeRobot {
 	@Override
 	public void robotInit() {
 		pdp               		 = new PowerDistributionPanel(0);
-
-		boolean robotHasTalonSRX = false;
 
 		try {
 			lowerRight = new CANTalon(1);
@@ -105,6 +113,11 @@ public class Robot extends IterativeRobot {
 			upperRight         = new CANTalon(10);
 			lowerLeft           = new CANTalon(11);
 			lowerRight          = new CANTalon(1);
+			
+			upperLeft.setCurrentLimit(driveCurrentLimit);
+			upperRight.setCurrentLimit(driveCurrentLimit);
+			lowerLeft.setCurrentLimit(driveCurrentLimit);
+			lowerRight.setCurrentLimit(driveCurrentLimit);
 
 			System.out.println("Running with CANTalons");
 
@@ -162,12 +175,13 @@ public class Robot extends IterativeRobot {
 
 		shooterOneTopMotor.setInverted(true);
 
+		compressor = new Compressor();
 		gearHandler			     = new DoubleSolenoid(6, 7);
 		driveTrainShifter        = new DoubleSolenoid(4, 5);
 
 		// Robot initially in low gear, this sets it into high gear
-		driveTrainShifter.set(DoubleSolenoid.Value.kReverse);
-
+		shiftTo(Gear.HIGH_GEAR);
+		
 		visionThread = new Thread(() -> {
 			UsbCamera camera = CameraServer.getInstance().startAutomaticCapture();
 			camera.setResolution(640, 480);
@@ -228,6 +242,18 @@ public class Robot extends IterativeRobot {
 		//            }
 		//        }).start();
 
+	}
+
+	private void shiftTo(Gear speed) {
+		if (speed == Gear.HIGH_GEAR) {
+			driveTrainShifter.set(DoubleSolenoid.Value.kReverse);
+			enableCurrentLimit(true);
+		}
+		
+		if (speed == Gear.LOW_GEAR) {
+			driveTrainShifter.set(DoubleSolenoid.Value.kForward);
+			enableCurrentLimit(false);
+		}
 	}
 
 	@Override
@@ -360,21 +386,51 @@ public class Robot extends IterativeRobot {
 	public void robotOperation(DriverInput input) {
 		//		System.out.println("Operating with: <" + input.toString() + ">");
 
+		/*
+		 * THe following inputs may cause the compressor to be disabled, therefore, we gather them here and decide
+		 * if the compressor should be allowed to run.  After that decision has been made, then we will act on the
+		 * inputs.
+		 */
 		double leftAxis = input.getAxis("Driver-Left");
 		double rightAxis = input.getAxis("Driver-Right");
+		boolean startButton = input.getButton("Operator-Start-Button");
+		boolean backButton = input.getButton("Operator-Back-Button");
+		
+		/*
+		 * 	If the driver sticks are at more than throttleHighThreshold (plus or minus) or if the winch is running, then disable the
+		 *  compressor. Re-enable the compressor when the sticks are less than throttleLowThreshold, and the winch is not running.
+		 *  This should reduce the number of times we start and stop the compressor.
+		 */
+		boolean compressorEnabled = compressor.enabled();
+		if ((Math.abs(leftAxis) > throttleHighThreshold) || (Math.abs(rightAxis) > throttleHighThreshold) || startButton || backButton) {
+			if (compressorEnabled) {
+				compressor.stop();
+			}
+		}
+		if ((Math.abs(leftAxis) < throttleLowThreshold) && (Math.abs(rightAxis) < throttleLowThreshold) && (!startButton) && (!backButton)) {
+			if (!compressorEnabled) {
+				compressor.start();
+			}
+		}
+
 		drive.tankDrive(leftAxis, rightAxis);
 
+		if (startButton) {
+			winchTalon.set(winchSpeed);
+		} else if (backButton) {
+			winchTalon.set(-winchSpeed);
+		} else {
+			winchTalon.set(0);
+		}
+		
 		boolean shift = (input.getButton("Driver-Right-Trigger") || input.getButton("Driver-Left-Trigger"));
 		highGear.setState
 		(shift);
-//		System.out.println("Gear State: " + highGear.getState() + "Button: " + shift);
 		if (highGear.getState()) {
-			driveTrainShifter.set(DoubleSolenoid.Value.kForward);
-//			controlDebug("Shifter forward(high)");
+			shiftTo(Gear.HIGH_GEAR);
 		} else {
-			driveTrainShifter.set(DoubleSolenoid.Value.kReverse);
-//			controlDebug("Shifter reverse(low)");
-}
+			shiftTo(Gear.LOW_GEAR);
+		}
 
 		if (input.getButton("Operator-X-Button") == true) {
 			shooterOneTopMotor.set(shooterSpeed);
@@ -383,7 +439,6 @@ public class Robot extends IterativeRobot {
 			shooterTwoBottomMotor.set(shooterSpeed);
 			agitatorLeft.set(agitatorSpeed);
 			agitatorRight.set(agitatorSpeed);
-			controlDebug("Shooters Forward (" + shooterSpeed + ")");
 		} else if (input.getButton("Operator-Y-Button") == true) {
 			shooterOneTopMotor.set(-shooterSpeed);
 			shooterTwoTopMotor.set(-shooterSpeed);
@@ -391,7 +446,6 @@ public class Robot extends IterativeRobot {
 			shooterTwoBottomMotor.set(-shooterSpeed);
 			agitatorLeft.set(-agitatorSpeed);
 			agitatorRight.set(-agitatorSpeed);
-			controlDebug("Shooters reverse");
 		} else {
 			shooterOneTopMotor.set(0);
 			shooterTwoTopMotor.set(0);
@@ -403,43 +457,30 @@ public class Robot extends IterativeRobot {
 
 		if (input.getButton("Operator-Right-Bumper")) {
 			gearHandler.set(DoubleSolenoid.Value.kForward);
-//			controlDebug("Gear handler forward");
 		} else if (input.getButton("Operator-Left-Bumper")) {
 			gearHandler.set(DoubleSolenoid.Value.kReverse);
-//			controlDebug("Gear handler reverse");
 		}
 
 		if (input.getButton("Operator-A-Button") == true) {
 			pickUpOneTalon.set(pickupSpeed);
-			controlDebug("Pickup forward (" + pickupSpeed + ")");
 		} else if (input.getButton("Operator-B-Button") == true) {
 			pickUpOneTalon.set(-pickupSpeed);
 		} else {
 			pickUpOneTalon.set(0);
 		}
-
-
-		if (input.getButton("Operator-Start-Button")) {
-			winchTalon.set(winchSpeed);
-//			controlDebug("Winch foreward");
-		} else if (input.getButton("Operator-Back-Button")) {
-			winchTalon.set(-winchSpeed);
-//			controlDebug("Winch reverse");
-		} else {
-			winchTalon.set(0);
-		}
 	}
 
-	private void controlDebug(String string) {
-		if (debugControls) {
-			System.out.println(string);
-		}
-		
-	}
-
-	@Override
 	public void testPeriodic() {
 		LiveWindow.run();
+	}
+	
+	private void enableCurrentLimit(boolean state) {
+		if (robotHasTalonSRX) {
+			upperLeft.EnableCurrentLimit(state);
+			upperRight.EnableCurrentLimit(state);
+			lowerLeft.EnableCurrentLimit(state);
+			lowerRight.EnableCurrentLimit(state);
+		}
 	}
 }
 
