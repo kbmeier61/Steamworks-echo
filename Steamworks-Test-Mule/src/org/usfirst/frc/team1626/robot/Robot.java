@@ -179,9 +179,6 @@ public class Robot extends IterativeRobot {
 		gearHandler			     = new DoubleSolenoid(6, 7);
 		driveTrainShifter        = new DoubleSolenoid(4, 5);
 
-		// Robot initially in low gear, this sets it into high gear
-		shiftTo(Gear.HIGH_GEAR);
-		
 		visionThread = new Thread(() -> {
 			UsbCamera camera = CameraServer.getInstance().startAutomaticCapture();
 			camera.setResolution(640, 480);
@@ -286,6 +283,9 @@ public class Robot extends IterativeRobot {
 		autoLoopCounter = 0;
 		actions.autonomousInit();
 		autoStarted=false;	
+		// Robot initially in low gear, this sets it into high gear
+		shiftTo(Gear.HIGH_GEAR);
+		
 	}
 
 	@Override
@@ -348,6 +348,9 @@ public class Robot extends IterativeRobot {
 	public void teleopInit() {
 		DriverInput.setRecordTime();
 		actions.teleopInit();
+		// Robot initially in low gear, this sets it into high gear
+		shiftTo(Gear.HIGH_GEAR);
+		
 	}
 
 	@Override
