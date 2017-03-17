@@ -248,11 +248,13 @@ public class Robot extends IterativeRobot {
 		if (speed == Gear.HIGH_GEAR) {
 			driveTrainShifter.set(DoubleSolenoid.Value.kReverse);
 			enableCurrentLimit(true);
+			SmartDashboard.putBoolean("DB/LED 3", true);
 		}
 		
 		if (speed == Gear.LOW_GEAR) {
 			driveTrainShifter.set(DoubleSolenoid.Value.kForward);
 			enableCurrentLimit(false);
+			SmartDashboard.putBoolean("DB/LED 3", false);
 		}
 	}
 
