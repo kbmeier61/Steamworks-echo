@@ -165,6 +165,7 @@ public class Robot extends IterativeRobot {
 		}
 
 
+		
 		driverLeft 		   = new Joystick(0);
 		driverRight 	   = new Joystick(1);
 
@@ -179,26 +180,31 @@ public class Robot extends IterativeRobot {
 		gearHandler			     = new DoubleSolenoid(6, 7);
 		driveTrainShifter        = new DoubleSolenoid(4, 5);
 
-		visionThread = new Thread(() -> {
-			UsbCamera camera = CameraServer.getInstance().startAutomaticCapture();
-			camera.setResolution(640, 480);
+		UsbCamera camera = CameraServer.getInstance().startAutomaticCapture();
+//		camera.setResolution(640, 480);
 
-			CvSink cvSink = CameraServer.getInstance().getVideo();
-			CvSource outputStream = CameraServer.getInstance().putVideo("Contours", 640, 480);
-
-			Mat mat = new Mat();
-
-			while (!Thread.interrupted()) {
-				if (cvSink.grabFrame(mat) == 0) {
-					outputStream.notifyError(cvSink.getError());
-					continue;
-				}
-
-				//				visionProcessing.process(mat);
-			}
-			visionThread.setDaemon(true);
-			visionThread.start();
-		});
+//		visionThread = new Thread(() -> {
+//			UsbCamera camera = CameraServer.getInstance().startAutomaticCapture();
+//			camera.setResolution(640, 480);
+//
+//			 CvSink cvSink = CameraServer.getInstance().getVideo();
+//			 CvSource outputStream = CameraServer.getInstance().putVideo("Contours", 640, 480);
+//
+//			Mat mat = new Mat();
+//
+//			while (!Thread.interrupted()) {
+//				if (cvSink.grabFrame(mat) == 0) {
+//					outputStream.notifyError(cvSink.getError());
+//					continue;
+//				} else {
+//					outputStream.putFrame(mat);
+//				}
+//				
+//				//				visionProcessing.process(mat);
+//			}
+//		});
+//		visionThread.setDaemon(true);
+//		visionThread.start();
 
 		actions 		   = new ActionRecorder();
 		actions.setMethod(this, "robotOperation", DriverInput.class).
@@ -285,7 +291,7 @@ public class Robot extends IterativeRobot {
 		autoStarted=false;	
 		// Robot initially in low gear, this sets it into high gear
 		shiftTo(Gear.HIGH_GEAR);
-		
+		gearHandler.set(DoubleSolenoid.Value.kReverse);
 	}
 
 	@Override
@@ -350,7 +356,7 @@ public class Robot extends IterativeRobot {
 		actions.teleopInit();
 		// Robot initially in low gear, this sets it into high gear
 		shiftTo(Gear.HIGH_GEAR);
-		
+		gearHandler.set(DoubleSolenoid.Value.kReverse);
 	}
 
 	@Override
